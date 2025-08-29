@@ -1,9 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Jersey+10&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-*{
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+
+@font-face {
+  font-family: 'Joystix';
+  src: url('/fonts/joystix.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Orange Kid';
+  src: url('/fonts/Orange-Kid.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@layer base {
+  body {
+    @apply bg-shibutis-dark text-shibutis-text font-body antialiased;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+ 
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .grid-cols-16 {
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+  }
+}
+
+/* Pixel font adjustments */
+.font-pixel {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
