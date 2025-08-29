@@ -4,6 +4,7 @@ import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Footer from "./components/Footer";
 import NFTMintPage from "./pages/NFTMint";
+import NFTGallery from "./pages/NFTGallery";
 
 const App: React.FC = () => {
   return (
@@ -14,6 +15,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/minting" element={<NFTMintPage />} />
+            <Route path="/gallery" element={<NFTGallery />} />
           </Routes>
         </main>
         <Footer />
