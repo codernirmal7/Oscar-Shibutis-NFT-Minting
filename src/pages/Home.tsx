@@ -1,8 +1,11 @@
 import { LucideLink, Star, Users, Trophy, Zap } from "lucide-react";
-import React from "react";
+import React, { useEffect } from "react";
 import { FancyButton } from "../components/ui/FancyButton";
 
 const Home: React.FC = () => {
+  useEffect(()=> {
+      scrollTo(0,0)
+  },[])
   return (
     <div className="bg-shibutis-dark text-shibutis-text font-body mt-20 max-w-screen-xl mx-auto overflow-hidden">
       {/* Hero Section */}
