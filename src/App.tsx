@@ -15,7 +15,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/minting" element={<NFTMintPage />} />
-            <Route path="/gallery" element={<NFTGallery />} />
+            {/* <Route path="/gallery" element={<NFTGallery />} /> */}
           </Routes>
         </main>
         <Footer />

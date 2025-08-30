@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Home, Palette, ShoppingBag } from 'lucide-react';
+import { Menu, X, Home, Palette, ShoppingBag, DoorClosedLocked, DoorClosedLockedIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 import { useDispatch, useSelector } from 'react-redux';
@@ -16,7 +16,7 @@ const Navbar: React.FC = () => {
 
   const { address, isConnected, chainId } = useAccount();
 
-  const initialAccountAddress = useSelector((state : RootState)=> state.wallet.address)
+  const initialAccountAddress = useSelector((state: RootState) => state.wallet.address)
 
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
@@ -65,9 +65,9 @@ const Navbar: React.FC = () => {
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
   const navItems = [
-    { href: '/', label: 'Home', icon: Home, hasDot: false },
-    { href: '/minting', label: 'Mint', icon: Palette, hasDot: true },
-    { href: '/gallery', label: 'Gallery', icon: ShoppingBag, hasDot: true },
+    { href: '/', label: 'Home', icon: Home, hasLocked: false },
+    { href: '/minting', label: 'Mint', icon: Palette, hasLocked: false },
+    { href: '/gallery', label: 'Gallery', icon: ShoppingBag, hasLocked: true },
   ];
 
   return (
@@ -99,16 +99,28 @@ const Navbar: React.FC = () => {
           {/* Desktop Links */}
           <div className="hidden lg:flex items-center space-x-6 xl:space-x-8">
             {navItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className="group relative text-white font-semibold hover:text-green-300 transition-all duration-200 flex items-center text-lg py-2 px-3 rounded-lg hover:bg-white/10"
-              >
+              !item.hasLocked ?
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className="group relative text-white font-semibold hover:text-green-300 transition-all duration-200 flex items-center text-lg py-2 px-3 rounded-lg hover:bg-white/10"
+                >
 
-                <item.icon className="w-4 h-4 mr-2 opacity-80 group-hover:opacity-100 transition-opacity duration-200" />
-                <span>{item.label}</span>
-                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-green-200 group-hover:w-full transition-all duration-300"></div>
-              </Link>
+                  <item.icon className="w-4 h-4 mr-2 opacity-80 group-hover:opacity-100 transition-opacity duration-200" />
+                  <span>{item.label}</span>
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-green-200 group-hover:w-full transition-all duration-300"></div>
+                </Link>
+                :
+                <Link
+                  key={item.href}
+                  to="#"
+                  className="group relative text-gray-300 cursor-default font-semibold transition-all duration-200 flex items-center text-lg py-2 px-3 rounded-lg "
+                >
+
+                  <svg className="MuiSvgIcon-root fill-gray-300" width={30} height={20} focusable="false" viewBox="0 0 24 24" aria-hidden="true" style={{ fontSize: "18px", marginRight: "5px" }}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"></path></svg>
+                  <span>{item.label}</span>
+                  {/* <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-green-200 group-hover:w-full transition-all duration-300"></div> */}
+                </Link>
             ))}
             <ConnectButton label="Connect Wallet" />
           </div>
