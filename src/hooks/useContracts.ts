@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Contract } from "ethers";
 import { useToast } from "./use-toast";
 import { CONTRACT_ADDRESSES, ContractInstance } from "../config/contracts";
@@ -8,9 +8,11 @@ export const useContracts = () => {
   const [contracts, setContracts] = useState<ContractInstance | null>(null);
   const { toast } = useToast();
 
-  const initializeContracts = async (signer: any) => {
-    try {
+  const initializeContracts = useCallback(async (signer: any) => {
+    // Prevent re-initialization if contracts already exist
+    if (contracts?.shibutisContract) return;
 
+    try {
       const shibutisContract = new Contract(
         CONTRACT_ADDRESSES.SHIBUTIS,
         shibutisABI,
@@ -28,7 +30,7 @@ export const useContracts = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [contracts?.shibutisContract, toast]);
 
   return {
     contracts,

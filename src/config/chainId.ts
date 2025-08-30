@@ -1,1 +1,1 @@
-export const SUPPORTED_CHAIN_ID = 1
+export const SUPPORTED_CHAIN_ID = 11155111

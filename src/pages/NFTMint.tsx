@@ -1,115 +1,155 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Wallet, 
-  Plus, 
-  Minus, 
-  Clock, 
-  Users, 
-  Star, 
-  Shield, 
+import { useSelector, useDispatch } from 'react-redux';
+import { useConnect, useDisconnect, useAccount, useChainId } from 'wagmi';
+import {
+  Wallet,
+  Plus,
+  Minus,
+  Clock,
+  Users,
+  Star,
+  Shield,
   Zap,
   CheckCircle,
   XCircle,
   Loader,
-  Trophy
+  AlertTriangle,
 } from 'lucide-react';
+import { useMinting } from '../hooks/useMinting';
+import { setWalletInfo, disconnectWallet as disconnectWalletAction } from '../store/slices/walletSlice';
+import { RootState } from '../store/index'; // Adjust path as needed
+import { useEthersSigner } from '../hooks/useEthersSigner';
 
 const NFTMintPage = () => {
-  // Mock wallet state
-  const [isConnected, setIsConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [txLoading, setTxLoading] = useState(false);
-  
-  // Contract state
-  const [salePhase, setSalePhase] = useState(0); // 0: Closed, 1: Allowlist, 2: Public
-  const [totalMinted, setTotalMinted] = useState(247);
-  const [maxSupply] = useState(1000);
-  const [mintPrice] = useState(0.05);
-  const [presalePrice] = useState(0);
-  const [maxPerWallet] = useState(3);
-  
-  // User state
+  const dispatch = useDispatch();
+
+  // Redux wallet state
+  const { address, isConnected, chainId: reduxChainId } = useSelector((state: RootState) => state.wallet);
+
+  // Wagmi hooks for connection management
+  const { disconnect } = useDisconnect();
+  const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount();
+  const chainId = useChainId();
+  const ethersSigner = useEthersSigner();
+
+  const {
+    config,
+    userInfo,
+    loading,
+    isCorrectChain,
+    presaleMint,
+    publicMint,
+    handleSwitchChain,
+    checkAllowlist,
+    isPresale,
+    isPublic,
+    isClosed,
+    totalMinted,
+    maxSupply,
+    mintPriceEth,
+    presalePriceEth,
+  } = useMinting();
+
+  // Local state
   const [mintQuantity, setMintQuantity] = useState(1);
-  const [userPresaleMinted, setUserPresaleMinted] = useState(0);
-  const [userPublicMinted, setUserPublicMinted] = useState(0);
-  const [isAllowlisted, setIsAllowlisted] = useState(true); // Mock allowlist status
-  const [userAllowance, setUserAllowance] = useState(2); // Mock user allowance
-  
-  // UI state
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Sync wagmi state with Redux
+  useEffect(() => {
+    if (wagmiConnected && wagmiAddress && chainId) {
+      dispatch(setWalletInfo({
+        address: wagmiAddress,
+        isConnected: wagmiConnected,
+        chainId,
+        signer: ethersSigner,
+      }));
+    } else if (!wagmiConnected) {
+      dispatch(disconnectWalletAction());
+    }
+  }, [wagmiConnected, wagmiAddress, chainId, ethersSigner, dispatch]);
+
   const phaseNames = ['Closed', 'Presale', 'Public Sale'];
-  const currentPhase = phaseNames[salePhase];
-  const isPresale = salePhase === 1;
-  const isPublic = salePhase === 2;
-  const isClosed = salePhase === 0;
-  
-  const currentPrice = isPresale ? presalePrice : mintPrice;
-  const totalCost = currentPrice * mintQuantity;
-  
-  // Calculate remaining mints for user
+  const currentPhase = phaseNames[config.salePhase] || 'Loading...';
+
+  // Get user's allowlist status
+  const allowlistInfo = address ? checkAllowlist(address) : {
+    proof: [],
+    isAllowlisted: false,
+    allowance: 0
+  };
+  const { proof, isAllowlisted, allowance: userAllowance } = allowlistInfo;
+
+  // Calculate user limits and remaining mints
+  const userPresaleMinted = Number(userInfo.presaleMinted);
+  const userPublicMinted = Number(userInfo.publicMinted);
+  const maxPerWalletPublic = Number(config.maxPerWalletPublic);
+
   const userMinted = isPresale ? userPresaleMinted : userPublicMinted;
-  const userLimit = isPresale ? userAllowance : maxPerWallet;
-  const remainingMints = userLimit - userMinted;
-  const canMint = remainingMints > 0 && !isClosed;
+  const userLimit = isPresale ? userAllowance : (maxPerWalletPublic || 999);
+  const remainingMints = Math.max(0, userLimit - userMinted);
+  const canMint = remainingMints > 0 && !isClosed && (isAllowlisted || isPublic);
 
-  // Mock wallet connection
-  const connectWallet = async () => {
-    setIsLoading(true);
-    // Simulate wallet connection
-    setTimeout(() => {
-      setIsConnected(true);
-      setWalletAddress('0x742d35Cc6634C0532925a3b8D47de5a5d2b92e5c');
-      setIsLoading(false);
-    }, 1500);
+  const currentPrice = isPresale ? presalePriceEth : mintPriceEth;
+  const totalCost = currentPrice * mintQuantity;
+
+
+  // Disconnect wallet
+  const handleDisconnectWallet = async () => {
+    try {
+      await disconnect();
+      dispatch(disconnectWalletAction());
+    } catch (error) {
+      console.error('Disconnection failed:', error);
+    }
   };
 
-  const disconnectWallet = () => {
-    setIsConnected(false);
-    setWalletAddress('');
-  };
-
-  // Mock minting function
-  const handleMint = async () => {
-    setTxLoading(true);
-    // Simulate transaction
-    setTimeout(() => {
-      if (isPresale) {
-        setUserPresaleMinted(prev => prev + mintQuantity);
-      } else {
-        setUserPublicMinted(prev => prev + mintQuantity);
-      }
-      setTotalMinted(prev => prev + mintQuantity);
-      setShowSuccess(true);
-      setTxLoading(false);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 2000);
-  };
-
-  useEffect(()=> {
-    scrollTo(0,0)
-  },[])
-
-  const adjustQuantity = (delta : any) => {
+  const adjustQuantity = (delta: number) => {
     const newQuantity = Math.max(1, Math.min(remainingMints, mintQuantity + delta));
     setMintQuantity(newQuantity);
   };
 
+  // Handle minting
+  const handleMint = async () => {
+    if (!address || !canMint) return;
+
+    try {
+      if (isPresale) {
+        await presaleMint(mintQuantity, userAllowance, proof);
+        setMintQuantity(1)
+      } else {
+        await publicMint(mintQuantity);
+        setMintQuantity(1)
+      }
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      console.error('Mint failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    scrollTo(0, 0);
+  }, []);
+
+  // Reset quantity when switching between phases or connecting wallet
+  useEffect(() => {
+    setMintQuantity(1);
+  }, [config.salePhase, address]);
+
   // Phase status component
   const PhaseStatus = () => (
     <div className="flex items-center justify-center gap-3 mb-8">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-pixel border ${
-        isPresale 
-          ? 'bg-shibutis-primary/10 text-shibutis-primary border-shibutis-primary/30'
-          : isPublic
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-pixel border ${isPresale
+        ? 'bg-shibutis-primary/10 text-shibutis-primary border-shibutis-primary/30'
+        : isPublic
           ? 'bg-shibutis-orange/10 text-shibutis-orange border-shibutis-orange/30'
           : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
-      }`}>
+        }`}>
         {isPresale ? <Star size={16} /> : isPublic ? <Users size={16} /> : <Clock size={16} />}
-        {currentPhase} {salePhase !== 0 && 'Active'}
+        {currentPhase} {config.salePhase !== 0 && 'Active'}
       </div>
-      
+
       {isPresale && (
         <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-shibutis-panel border border-shibutis-border">
           <Shield size={12} className="text-shibutis-primary" />
@@ -155,7 +195,9 @@ const NFTMintPage = () => {
                 />
                 <div className="text-center">
                   <h3 className="font-pixel text-xl text-shibutis-primary mb-2">SHIBUTIS #???</h3>
-                  <p className="text-shibutis-subtitle text-sm">Your unique Shibutis will be revealed after mint</p>
+                  <p className="text-shibutis-subtitle text-sm">
+                    {config.revealed ? 'Your unique Shibutis will be revealed after mint' : 'NFTs will be revealed after minting'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -163,11 +205,15 @@ const NFTMintPage = () => {
             {/* Collection Stats */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-shibutis-panel/50 rounded-lg p-4 border border-shibutis-border/30 text-center">
-                <div className="text-xl font-pixel text-shibutis-primary mb-1">{totalMinted}</div>
+                <div className="text-xl font-pixel text-shibutis-primary mb-1">
+                  {loading.contract ? '...' : totalMinted}
+                </div>
                 <div className="text-sm text-shibutis-subtitle">Minted</div>
               </div>
               <div className="bg-shibutis-panel/50 rounded-lg p-4 border border-shibutis-border/30 text-center">
-                <div className="text-xl font-pixel text-shibutis-orange mb-1">{maxSupply - totalMinted}</div>
+                <div className="text-xl font-pixel text-shibutis-orange mb-1">
+                  {loading.contract ? '...' : maxSupply - totalMinted}
+                </div>
                 <div className="text-sm text-shibutis-subtitle">Remaining</div>
               </div>
             </div>
@@ -175,6 +221,25 @@ const NFTMintPage = () => {
 
           {/* Right: Mint Interface */}
           <div className="space-y-6">
+            {/* Wrong Chain Warning */}
+            {isConnected && !isCorrectChain && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 text-center">
+                <AlertTriangle size={48} className="mx-auto text-yellow-400 mb-4" />
+                <h3 className="font-pixel text-lg text-yellow-400 mb-2">Wrong Network</h3>
+                <p className="text-yellow-300/80 text-sm mb-4">
+                  Please switch to Ethereum Mainnet to continue
+                </p>
+                <button
+                  onClick={handleSwitchChain}
+                  disabled={loading.switchingChain}
+                  className="bg-yellow-500 hover:bg-yellow-500/90 text-black px-6 py-2 rounded-lg font-pixel transition-all duration-300 flex items-center gap-2 mx-auto disabled:opacity-50"
+                >
+                  {loading.switchingChain ? <Loader size={16} className="animate-spin" /> : null}
+                  {loading.switchingChain ? 'Switching...' : 'Switch Network'}
+                </button>
+              </div>
+            )}
+
             {/* Wallet Connection */}
             {!isConnected ? (
               <div className="bg-shibutis-panel rounded-xl p-8 border border-shibutis-border text-center">
@@ -183,14 +248,7 @@ const NFTMintPage = () => {
                 <p className="text-shibutis-subtitle mb-6">
                   Connect your wallet to start minting your Shibutis NFT
                 </p>
-                <button
-                  onClick={connectWallet}
-                  disabled={isLoading}
-                  className="bg-shibutis-primary hover:bg-shibutis-primary/90 text-shibutis-dark px-8 py-3 rounded-lg font-pixel transition-all duration-300 hover:scale-105 disabled:opacity-50 flex items-center gap-2 mx-auto"
-                >
-                  {isLoading ? <Loader size={20} className="animate-spin" /> : <Wallet size={20} />}
-                  {isLoading ? 'Connecting...' : 'Connect Wallet'}
-                </button>
+
               </div>
             ) : (
               <>
@@ -202,33 +260,43 @@ const NFTMintPage = () => {
                     </div>
                     <div>
                       <div className="text-sm text-shibutis-text font-mono">
-                        {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                        {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
                       </div>
-                      <div className="text-xs text-shibutis-subtitle">Connected</div>
+                      <div className="text-xs text-shibutis-subtitle">
+                        Connected {reduxChainId ? `• Chain ${reduxChainId}` : ''}
+                      </div>
                     </div>
                   </div>
                   <button
-                    onClick={disconnectWallet}
+                    onClick={handleDisconnectWallet}
                     className="text-xs text-shibutis-subtitle hover:text-shibutis-text transition-colors"
                   >
                     Disconnect
                   </button>
                 </div>
 
+                {/* Contract Loading */}
+                {loading.contract && (
+                  <div className="bg-shibutis-panel rounded-xl p-8 border border-shibutis-border text-center">
+                    <Loader size={48} className="mx-auto text-shibutis-primary mb-4 animate-spin" />
+                    <h3 className="font-pixel text-xl text-shibutis-primary mb-2">Loading Contract</h3>
+                    <p className="text-shibutis-subtitle">Fetching contract information...</p>
+                  </div>
+                )}
+
                 {/* Allowlist Status (Presale only) */}
-                {isPresale && (
-                  <div className={`rounded-lg p-4 border flex items-center gap-3 ${
-                    isAllowlisted
-                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                      : 'bg-red-500/10 border-red-500/30 text-red-400'
-                  }`}>
+                {isPresale && !loading.contract && isCorrectChain && (
+                  <div className={`rounded-lg p-4 border flex items-center gap-3 ${isAllowlisted
+                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                    }`}>
                     {isAllowlisted ? <CheckCircle size={20} /> : <XCircle size={20} />}
                     <div>
                       <div className="font-pixel text-sm">
                         {isAllowlisted ? 'Allowlist Verified' : 'Not Allowlisted'}
                       </div>
                       <div className="text-xs opacity-80">
-                        {isAllowlisted 
+                        {isAllowlisted
                           ? `You can mint up to ${userAllowance} NFTs in presale`
                           : 'You need to be on the allowlist for presale'
                         }
@@ -237,17 +305,18 @@ const NFTMintPage = () => {
                   </div>
                 )}
 
+
                 {/* Mint Interface */}
-                {!isClosed && (isAllowlisted || isPublic) && (
+                {!isClosed && !loading.contract && isCorrectChain && (isAllowlisted || isPublic) && (
                   <div className="bg-shibutis-panel rounded-xl p-6 border border-shibutis-border space-y-6">
                     <div className="text-center">
                       <h3 className="font-pixel text-xl text-shibutis-primary mb-2">
                         {isPresale ? 'Presale Mint' : 'Public Mint'}
                       </h3>
                       <p className="text-shibutis-subtitle text-sm">
-                        {isPresale 
+                        {isPresale
                           ? `${currentPrice} ETH per NFT • ${remainingMints} remaining for you`
-                          : `${currentPrice} ETH per NFT • Max ${maxPerWallet} per wallet`
+                          : `${currentPrice} ETH per NFT • ${maxPerWalletPublic === 0 ? 'No limit' : `Max ${maxPerWalletPublic} per wallet`}`
                         }
                       </p>
                     </div>
@@ -265,11 +334,11 @@ const NFTMintPage = () => {
                         >
                           <Minus size={16} />
                         </button>
-                        
+
                         <div className="text-2xl font-pixel text-shibutis-primary min-w-[3rem] text-center">
                           {mintQuantity}
                         </div>
-                        
+
                         <button
                           onClick={() => adjustQuantity(1)}
                           disabled={mintQuantity >= remainingMints}
@@ -278,7 +347,7 @@ const NFTMintPage = () => {
                           <Plus size={16} />
                         </button>
                       </div>
-                      
+
                       <div className="text-center text-sm text-shibutis-subtitle">
                         {remainingMints} remaining • {userMinted} already minted
                       </div>
@@ -289,7 +358,7 @@ const NFTMintPage = () => {
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-shibutis-subtitle">Total Cost:</span>
                         <span className="font-pixel text-xl text-shibutis-primary">
-                          {totalCost.toFixed(3)} ETH
+                          {totalCost.toFixed(4)} ETH
                         </span>
                       </div>
                       <div className="text-xs text-shibutis-subtitle">
@@ -300,16 +369,15 @@ const NFTMintPage = () => {
                     {/* Mint Button */}
                     <button
                       onClick={handleMint}
-                      disabled={!canMint || txLoading || remainingMints === 0}
+                      disabled={!canMint || loading.minting || remainingMints === 0}
                       className="w-full relative group"
                     >
                       <div className="absolute -inset-1 bg-gradient-to-r from-shibutis-primary to-shibutis-orange rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-300"></div>
-                      <div className={`relative w-full py-4 px-6 rounded-lg font-pixel text-lg transition-all duration-300 flex items-center justify-center gap-3 ${
-                        canMint && !txLoading
-                          ? 'bg-shibutis-primary hover:bg-shibutis-primary/90 text-shibutis-dark hover:scale-[1.02]'
-                          : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      }`}>
-                        {txLoading ? (
+                      <div className={`relative w-full py-4 px-6 rounded-lg font-pixel text-lg transition-all duration-300 flex items-center justify-center gap-3 ${canMint && !loading.minting
+                        ? 'bg-shibutis-primary hover:bg-shibutis-primary/90 text-shibutis-dark hover:scale-[1.02]'
+                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        }`}>
+                        {loading.minting ? (
                           <>
                             <Loader size={20} className="animate-spin" />
                             Processing...
@@ -336,7 +404,7 @@ const NFTMintPage = () => {
                 )}
 
                 {/* Phase Closed Message */}
-                {isClosed && (
+                {isClosed && !loading.contract && isCorrectChain && (
                   <div className="bg-shibutis-panel rounded-xl p-8 border border-shibutis-border text-center">
                     <Clock size={48} className="mx-auto text-gray-400 mb-4" />
                     <h3 className="font-pixel text-xl text-gray-400 mb-2">Sale Not Active</h3>
@@ -347,7 +415,7 @@ const NFTMintPage = () => {
                 )}
 
                 {/* Not Allowlisted Message */}
-                {isPresale && !isAllowlisted && (
+                {isPresale && !isAllowlisted && !loading.contract && isCorrectChain && (
                   <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
                     <XCircle size={48} className="mx-auto text-red-400 mb-4" />
                     <h3 className="font-pixel text-lg text-red-400 mb-2">Not Allowlisted</h3>
@@ -364,22 +432,18 @@ const NFTMintPage = () => {
         {/* Sale Info Cards */}
         <div className="mt-16 grid md:grid-cols-2 gap-8">
           {/* Presale Info */}
-          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${
-            isPresale 
-              ? 'border-shibutis-primary/50 shadow-lg shadow-shibutis-primary/10' 
-              : 'border-shibutis-border/30'
-          }`}>
+          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${isPresale
+            ? 'border-shibutis-primary/50 shadow-lg shadow-shibutis-primary/10'
+            : 'border-shibutis-border/30'
+            }`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${
-                isPresale ? 'bg-shibutis-primary/20' : 'bg-gray-500/20'
-              }`}>
-                <Star className={`w-5 h-5 ${
-                  isPresale ? 'text-shibutis-primary' : 'text-gray-400'
-                }`} />
+              <div className={`p-2 rounded-lg ${isPresale ? 'bg-shibutis-primary/20' : 'bg-gray-500/20'
+                }`}>
+                <Star className={`w-5 h-5 ${isPresale ? 'text-shibutis-primary' : 'text-gray-400'
+                  }`} />
               </div>
-              <h3 className={`font-pixel text-lg ${
-                isPresale ? 'text-shibutis-primary' : 'text-gray-400'
-              }`}>
+              <h3 className={`font-pixel text-lg ${isPresale ? 'text-shibutis-primary' : 'text-gray-400'
+                }`}>
                 Presale Phase
               </h3>
               {isPresale && (
@@ -392,7 +456,7 @@ const NFTMintPage = () => {
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Price:</span>
                 <span className="text-shibutis-text font-mono">
-                  {presalePrice} ETH {presalePrice === 0 && '(FREE!)'}
+                  {loading.contract ? '...' : `${presalePriceEth} ETH`} {presalePriceEth === 0 && !loading.contract && '(FREE!)'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -401,28 +465,29 @@ const NFTMintPage = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Your Allocation:</span>
-                <span className="text-shibutis-text">{userAllowance} NFTs</span>
+                <span className="text-shibutis-text">
+                  {isConnected && address ? (
+                    isAllowlisted ? `${userAllowance} NFTs` : 'Not Allowlisted'
+                  ) : 'Connect Wallet'}
+                </span>
               </div>
             </div>
           </div>
 
+
           {/* Public Sale Info */}
-          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${
-            isPublic 
-              ? 'border-shibutis-orange/50 shadow-lg shadow-shibutis-orange/10' 
-              : 'border-shibutis-border/30'
-          }`}>
+          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${isPublic
+            ? 'border-shibutis-orange/50 shadow-lg shadow-shibutis-orange/10'
+            : 'border-shibutis-border/30'
+            }`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${
-                isPublic ? 'bg-shibutis-orange/20' : 'bg-gray-500/20'
-              }`}>
-                <Users className={`w-5 h-5 ${
-                  isPublic ? 'text-shibutis-orange' : 'text-gray-400'
-                }`} />
+              <div className={`p-2 rounded-lg ${isPublic ? 'bg-shibutis-orange/20' : 'bg-gray-500/20'
+                }`}>
+                <Users className={`w-5 h-5 ${isPublic ? 'text-shibutis-orange' : 'text-gray-400'
+                  }`} />
               </div>
-              <h3 className={`font-pixel text-lg ${
-                isPublic ? 'text-shibutis-orange' : 'text-gray-400'
-              }`}>
+              <h3 className={`font-pixel text-lg ${isPublic ? 'text-shibutis-orange' : 'text-gray-400'
+                }`}>
                 Public Sale
               </h3>
               {isPublic && (
@@ -434,7 +499,9 @@ const NFTMintPage = () => {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Price:</span>
-                <span className="text-shibutis-text font-mono">{mintPrice} ETH</span>
+                <span className="text-shibutis-text font-mono">
+                  {loading.contract ? '...' : `${mintPriceEth} ETH`}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Access:</span>
@@ -443,7 +510,7 @@ const NFTMintPage = () => {
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Max per Wallet:</span>
                 <span className="text-shibutis-text">
-                  {maxPerWallet === 0 ? 'Unlimited' : `${maxPerWallet} NFTs`}
+                  {loading.contract ? '...' : maxPerWalletPublic === 0 ? 'Unlimited' : `${maxPerWalletPublic} NFTs`}
                 </span>
               </div>
             </div>
@@ -455,23 +522,21 @@ const NFTMintPage = () => {
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-shibutis-subtitle">Mint Progress</span>
             <span className="text-sm text-shibutis-text">
-              {totalMinted} / {maxSupply}
+              {loading.contract ? '...' : `${totalMinted} / ${maxSupply}`}
             </span>
           </div>
           <div className="w-full bg-shibutis-dark rounded-full h-3 border border-shibutis-border/30 overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-shibutis-primary to-shibutis-orange rounded-full transition-all duration-500 relative"
-              style={{ width: `${(totalMinted / maxSupply) * 100}%` }}
+              style={{ width: loading.contract ? '0%' : `${(totalMinted / maxSupply) * 100}%` }}
             >
               <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
             </div>
           </div>
           <div className="text-center mt-2 text-xs text-shibutis-subtitle">
-            {((totalMinted / maxSupply) * 100).toFixed(1)}% minted
+            {loading.contract ? '...' : `${((totalMinted / maxSupply) * 100).toFixed(1)}% minted`}
           </div>
         </div>
-
-      
       </div>
     </div>
   );
