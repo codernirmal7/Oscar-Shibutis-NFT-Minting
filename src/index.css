@@ -24,7 +24,8 @@
     font-size: 16px;
     line-height: 1.6;
   }
- 
+
+
   html {
     scroll-behavior: smooth;
   }
@@ -41,4 +42,26 @@
   image-rendering: pixelated;
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
+}
+
+[data-rk] .ju367v9i {
+  background: white !important;
+  color : rgb(0 183 46) !important;
+}
+
+[data-rk] .ju367vei {
+  box-shadow: none !important;
+}
+
+[data-rk] .ju367vn {
+  border-radius: 8px;
+}
+
+[data-rk] .ju367v1h {
+  font-weight: 500 !important;
+
+}
+
+[data-rk] .ju367v7t {
+  height: 45px !important;
 }

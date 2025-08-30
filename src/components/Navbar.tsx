@@ -1,10 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Home, Palette, ShoppingBag, Wallet } from 'lucide-react';
+import { Menu, X, Home, Palette, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAccount } from 'wagmi';
+import { useDispatch, useSelector } from 'react-redux';
+import type { AppDispatch, RootState } from '../store';
+import { useToast } from '../hooks/use-toast';
+import { useEthersSigner } from '../hooks/useEthersSigner';
+import { disconnectWallet, setWalletInfo } from '../store/slices/walletSlice';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const { address, isConnected, chainId } = useAccount();
+
+  const initialAccountAddress = useSelector((state : RootState)=> state.wallet.address)
+
+  const dispatch = useDispatch<AppDispatch>();
+  const { toast } = useToast();
+
+  const signer = useEthersSigner();
+
+  useEffect(() => {
+    if (isConnected && address && chainId && signer) {
+      dispatch(setWalletInfo({ address, isConnected, chainId, signer }));
+      toast({
+        title: "Wallet Connected",
+        description: "Successfully connected to your wallet.",
+      });
+
+    } else {
+      dispatch(disconnectWallet());
+    }
+
+    if (initialAccountAddress && address !== initialAccountAddress) {
+      dispatch(disconnectWallet());
+      window.location.reload(); // Optional: reload page to reset state
+    }
+  }, [address, isConnected, chainId, signer]);
 
   // Scroll effect for shadow
   useEffect(() => {
@@ -75,10 +110,7 @@ const Navbar: React.FC = () => {
                 <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-green-200 group-hover:w-full transition-all duration-300"></div>
               </Link>
             ))}
-            <button className="bg-white text-shibutis-primary font-bold px-4 xl:px-6 py-2 xl:py-2.5 rounded-lg hover:bg-gray-50 hover:shadow-md transition-all duration-200 transform hover:scale-105 active:scale-95 flex items-center space-x-2">
-              <Wallet className="w-4 h-4" />
-              <span className='text-lg'>Connect Wallet</span>
-            </button>
+            <ConnectButton label="Connect Wallet" />
           </div>
 
           {/* Mobile Menu Button */}
@@ -117,13 +149,7 @@ const Navbar: React.FC = () => {
               </Link>
             ))}
             <div className="pt-2 px-2">
-              <button
-                className="w-full bg-white text-shibutis-primary font-bold px-4 py-3 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center justify-center space-x-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                <Wallet className="w-5 h-5" />
-                <span>Connect Wallet</span>
-              </button>
+              <ConnectButton label="Connect Wallet" />
             </div>
           </div>
         </div>
