@@ -14,10 +14,12 @@ import {
   XCircle,
   Loader,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { useMinting } from '../hooks/useMinting';
+import { useReadOnlyMintInfo } from '../hooks/useReadOnlyMintInfo';
 import { setWalletInfo, disconnectWallet as disconnectWalletAction } from '../store/slices/walletSlice';
-import { RootState } from '../store/index'; // Adjust path as needed
+import { RootState } from '../store/index';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 
 const NFTMintPage = () => {
@@ -32,6 +34,15 @@ const NFTMintPage = () => {
   const chainId = useChainId();
   const ethersSigner = useEthersSigner();
 
+  // Read-only mint info (works without wallet connection)
+  const {
+    mintInfo: readOnlyMintInfo,
+    loading: readOnlyLoading,
+    error: readOnlyError,
+    refresh: refreshReadOnlyData
+  } = useReadOnlyMintInfo();
+
+  // Wallet-connected minting functionality
   const {
     config,
     userInfo,
@@ -41,18 +52,27 @@ const NFTMintPage = () => {
     publicMint,
     handleSwitchChain,
     checkAllowlist,
-    isPresale,
-    isPublic,
-    isClosed,
-    totalMinted,
-    maxSupply,
-    mintPriceEth,
-    presalePriceEth,
+    isPresale: connectedIsPresale,
+    isPublic: connectedIsPublic,
+    isClosed: connectedIsClosed,
+    totalMinted: connectedTotalMinted,
+    maxSupply: connectedMaxSupply,
+    mintPriceEth: connectedMintPriceEth,
+    presalePriceEth: connectedPresalePriceEth,
   } = useMinting();
 
   // Local state
   const [mintQuantity, setMintQuantity] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // Use read-only data as fallback, connected data when available
+  const isPresale = isConnected && config.salePhase !== undefined ? connectedIsPresale : readOnlyMintInfo?.isPresaleActive;
+  const isPublic = isConnected && config.salePhase !== undefined ? connectedIsPublic : readOnlyMintInfo?.isPublicActive;
+  const isClosed = isConnected && config.salePhase !== undefined ? connectedIsClosed : readOnlyMintInfo?.isClosed;
+  const totalMinted = isConnected && config.totalSupply !== undefined ? connectedTotalMinted : readOnlyMintInfo?.totalSupply || 0;
+  const maxSupply = isConnected && config.maxSupply !== undefined ? connectedMaxSupply : readOnlyMintInfo?.maxSupply || 1000;
+  const mintPriceEth = isConnected && config.mintPrice !== undefined ? connectedMintPriceEth : parseFloat(readOnlyMintInfo?.mintPrice || '0');
+  const presalePriceEth = isConnected && config.presalePrice !== undefined ? connectedPresalePriceEth : parseFloat(readOnlyMintInfo?.presalePrice || '0');
 
   // Sync wagmi state with Redux
   useEffect(() => {
@@ -69,9 +89,11 @@ const NFTMintPage = () => {
   }, [wagmiConnected, wagmiAddress, chainId, ethersSigner, dispatch]);
 
   const phaseNames = ['Closed', 'Presale', 'Public Sale'];
-  const currentPhase = phaseNames[config.salePhase] || 'Loading...';
+  const currentPhase = isConnected 
+    ? (phaseNames[config.salePhase] || 'Loading...') 
+    : (readOnlyMintInfo?.salePhaseText || 'Loading...');
 
-  // Get user's allowlist status
+  // Get user's allowlist status (only when connected)
   const allowlistInfo = address ? checkAllowlist(address) : {
     proof: [],
     isAllowlisted: false,
@@ -79,10 +101,12 @@ const NFTMintPage = () => {
   };
   const { proof, isAllowlisted, allowance: userAllowance } = allowlistInfo;
 
-  // Calculate user limits and remaining mints
+  // Calculate user limits and remaining mints (only when connected)
   const userPresaleMinted = Number(userInfo.presaleMinted);
   const userPublicMinted = Number(userInfo.publicMinted);
-  const maxPerWalletPublic = Number(config.maxPerWalletPublic);
+  const maxPerWalletPublic = isConnected && config.maxPerWalletPublic !== undefined 
+    ? Number(config.maxPerWalletPublic) 
+    : readOnlyMintInfo?.maxPerWalletPublic || 0;
 
   const userMinted = isPresale ? userPresaleMinted : userPublicMinted;
   const userLimit = isPresale ? userAllowance : (maxPerWalletPublic || 999);
@@ -92,7 +116,7 @@ const NFTMintPage = () => {
   const currentPrice = isPresale ? presalePriceEth : mintPriceEth;
   const totalCost = currentPrice * mintQuantity;
 
-
+  
   // Disconnect wallet
   const handleDisconnectWallet = async () => {
     try {
@@ -115,10 +139,10 @@ const NFTMintPage = () => {
     try {
       if (isPresale) {
         await presaleMint(mintQuantity, userAllowance, proof);
-        setMintQuantity(1)
+        setMintQuantity(1);
       } else {
         await publicMint(mintQuantity);
-        setMintQuantity(1)
+        setMintQuantity(1);
       }
 
       setShowSuccess(true);
@@ -137,17 +161,28 @@ const NFTMintPage = () => {
     setMintQuantity(1);
   }, [config.salePhase, address]);
 
+  // Determine if we're loading data
+  const isLoadingData = isConnected ? loading.contract : readOnlyLoading;
+
   // Phase status component
   const PhaseStatus = () => (
     <div className="flex items-center justify-center gap-3 mb-8">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-pixel border ${isPresale
-        ? 'bg-shibutis-primary/10 text-shibutis-primary border-shibutis-primary/30'
-        : isPublic
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-pixel border ${
+        isPresale
+          ? 'bg-shibutis-primary/10 text-shibutis-primary border-shibutis-primary/30'
+          : isPublic
           ? 'bg-shibutis-orange/10 text-shibutis-orange border-shibutis-orange/30'
           : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
-        }`}>
+      }`}>
         {isPresale ? <Star size={16} /> : isPublic ? <Users size={16} /> : <Clock size={16} />}
-        {currentPhase} {config.salePhase !== 0 && 'Active'}
+        {currentPhase} {(isPresale || isPublic) && 'Active'}
+        {!isConnected && (
+          <RefreshCw 
+            size={12} 
+            className={`ml-2 cursor-pointer hover:text-white ${readOnlyLoading ? 'animate-spin' : ''}`}
+            onClick={refreshReadOnlyData}
+          />
+        )}
       </div>
 
       {isPresale && (
@@ -178,7 +213,24 @@ const NFTMintPage = () => {
           <p className="text-shibutis-subtitle text-lg lg:text-xl max-w-2xl mx-auto">
             Join the exclusive Shibutis Social Club by minting your unique NFT
           </p>
+        
         </div>
+
+        {/* Read-only Error Display */}
+        {readOnlyError && !isConnected && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center mb-8">
+            <AlertTriangle size={48} className="mx-auto text-red-400 mb-4" />
+            <h3 className="font-pixel text-lg text-red-400 mb-2">Error Loading Contract Data</h3>
+            <p className="text-red-300/80 text-sm mb-4">{readOnlyError}</p>
+            <button
+              onClick={refreshReadOnlyData}
+              className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-lg font-pixel transition-colors flex items-center gap-2 mx-auto"
+            >
+              <RefreshCw size={16} />
+              Retry
+            </button>
+          </div>
+        )}
 
         <PhaseStatus />
 
@@ -196,23 +248,26 @@ const NFTMintPage = () => {
                 <div className="text-center">
                   <h3 className="font-pixel text-xl text-shibutis-primary mb-2">SHIBUTIS #???</h3>
                   <p className="text-shibutis-subtitle text-sm">
-                    {config.revealed ? 'Your unique Shibutis will be revealed after mint' : 'NFTs will be revealed after minting'}
+                    {(isConnected && config.revealed !== undefined ? config.revealed : readOnlyMintInfo?.revealed) 
+                      ? 'Your unique Shibutis will be revealed after mint' 
+                      : 'NFTs will be revealed after minting'
+                    }
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Collection Stats */}
+            {/* Collection Stats - Now shows data without wallet connection */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-shibutis-panel/50 rounded-lg p-4 border border-shibutis-border/30 text-center">
                 <div className="text-xl font-pixel text-shibutis-primary mb-1">
-                  {loading.contract ? '...' : totalMinted}
+                  {isLoadingData ? '...' : totalMinted.toLocaleString()}
                 </div>
                 <div className="text-sm text-shibutis-subtitle">Minted</div>
               </div>
               <div className="bg-shibutis-panel/50 rounded-lg p-4 border border-shibutis-border/30 text-center">
                 <div className="text-xl font-pixel text-shibutis-orange mb-1">
-                  {loading.contract ? '...' : maxSupply - totalMinted}
+                  {isLoadingData ? '...' : (maxSupply - totalMinted).toLocaleString()}
                 </div>
                 <div className="text-sm text-shibutis-subtitle">Remaining</div>
               </div>
@@ -227,7 +282,7 @@ const NFTMintPage = () => {
                 <AlertTriangle size={48} className="mx-auto text-yellow-400 mb-4" />
                 <h3 className="font-pixel text-lg text-yellow-400 mb-2">Wrong Network</h3>
                 <p className="text-yellow-300/80 text-sm mb-4">
-                  Please switch to Ethereum Mainnet to continue
+                  Please switch to Sepolia Testnet to continue
                 </p>
                 <button
                   onClick={handleSwitchChain}
@@ -248,7 +303,7 @@ const NFTMintPage = () => {
                 <p className="text-shibutis-subtitle mb-6">
                   Connect your wallet to start minting your Shibutis NFT
                 </p>
-
+               
               </div>
             ) : (
               <>
@@ -286,10 +341,11 @@ const NFTMintPage = () => {
 
                 {/* Allowlist Status (Presale only) */}
                 {isPresale && !loading.contract && isCorrectChain && (
-                  <div className={`rounded-lg p-4 border flex items-center gap-3 ${isAllowlisted
-                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                    : 'bg-red-500/10 border-red-500/30 text-red-400'
-                    }`}>
+                  <div className={`rounded-lg p-4 border flex items-center gap-3 ${
+                    isAllowlisted
+                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                      : 'bg-red-500/10 border-red-500/30 text-red-400'
+                  }`}>
                     {isAllowlisted ? <CheckCircle size={20} /> : <XCircle size={20} />}
                     <div>
                       <div className="font-pixel text-sm">
@@ -304,7 +360,6 @@ const NFTMintPage = () => {
                     </div>
                   </div>
                 )}
-
 
                 {/* Mint Interface */}
                 {!isClosed && !loading.contract && isCorrectChain && (isAllowlisted || isPublic) && (
@@ -373,10 +428,11 @@ const NFTMintPage = () => {
                       className="w-full relative group"
                     >
                       <div className="absolute -inset-1 bg-gradient-to-r from-shibutis-primary to-shibutis-orange rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-300"></div>
-                      <div className={`relative w-full py-4 px-6 rounded-lg font-pixel text-lg transition-all duration-300 flex items-center justify-center gap-3 ${canMint && !loading.minting
-                        ? 'bg-shibutis-primary hover:bg-shibutis-primary/90 text-shibutis-dark hover:scale-[1.02]'
-                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        }`}>
+                      <div className={`relative w-full py-4 px-6 rounded-lg font-pixel text-lg transition-all duration-300 flex items-center justify-center gap-3 ${
+                        canMint && !loading.minting
+                          ? 'bg-shibutis-primary hover:bg-shibutis-primary/90 text-shibutis-dark hover:scale-[1.02]'
+                          : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      }`}>
                         {loading.minting ? (
                           <>
                             <Loader size={20} className="animate-spin" />
@@ -429,21 +485,25 @@ const NFTMintPage = () => {
           </div>
         </div>
 
-        {/* Sale Info Cards */}
+        {/* Sale Info Cards - Now shows data without wallet connection */}
         <div className="mt-16 grid md:grid-cols-2 gap-8">
           {/* Presale Info */}
-          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${isPresale
-            ? 'border-shibutis-primary/50 shadow-lg shadow-shibutis-primary/10'
-            : 'border-shibutis-border/30'
-            }`}>
+          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${
+            isPresale
+              ? 'border-shibutis-primary/50 shadow-lg shadow-shibutis-primary/10'
+              : 'border-shibutis-border/30'
+          }`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${isPresale ? 'bg-shibutis-primary/20' : 'bg-gray-500/20'
-                }`}>
-                <Star className={`w-5 h-5 ${isPresale ? 'text-shibutis-primary' : 'text-gray-400'
-                  }`} />
+              <div className={`p-2 rounded-lg ${
+                isPresale ? 'bg-shibutis-primary/20' : 'bg-gray-500/20'
+              }`}>
+                <Star className={`w-5 h-5 ${
+                  isPresale ? 'text-shibutis-primary' : 'text-gray-400'
+                }`} />
               </div>
-              <h3 className={`font-pixel text-lg ${isPresale ? 'text-shibutis-primary' : 'text-gray-400'
-                }`}>
+              <h3 className={`font-pixel text-lg ${
+                isPresale ? 'text-shibutis-primary' : 'text-gray-400'
+              }`}>
                 Presale Phase
               </h3>
               {isPresale && (
@@ -456,7 +516,7 @@ const NFTMintPage = () => {
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Price:</span>
                 <span className="text-shibutis-text font-mono">
-                  {loading.contract ? '...' : `${presalePriceEth} ETH`} {presalePriceEth === 0 && !loading.contract && '(FREE!)'}
+                  {isLoadingData ? '...' : `${presalePriceEth} ETH`} {presalePriceEth === 0 && !isLoadingData && '(FREE!)'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -474,20 +534,23 @@ const NFTMintPage = () => {
             </div>
           </div>
 
-
           {/* Public Sale Info */}
-          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${isPublic
-            ? 'border-shibutis-orange/50 shadow-lg shadow-shibutis-orange/10'
-            : 'border-shibutis-border/30'
-            }`}>
+          <div className={`bg-shibutis-panel rounded-xl p-6 border transition-all duration-300 ${
+            isPublic
+              ? 'border-shibutis-orange/50 shadow-lg shadow-shibutis-orange/10'
+              : 'border-shibutis-border/30'
+          }`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${isPublic ? 'bg-shibutis-orange/20' : 'bg-gray-500/20'
-                }`}>
-                <Users className={`w-5 h-5 ${isPublic ? 'text-shibutis-orange' : 'text-gray-400'
-                  }`} />
+              <div className={`p-2 rounded-lg ${
+                isPublic ? 'bg-shibutis-orange/20' : 'bg-gray-500/20'
+              }`}>
+                <Users className={`w-5 h-5 ${
+                  isPublic ? 'text-shibutis-orange' : 'text-gray-400'
+                }`} />
               </div>
-              <h3 className={`font-pixel text-lg ${isPublic ? 'text-shibutis-orange' : 'text-gray-400'
-                }`}>
+              <h3 className={`font-pixel text-lg ${
+                isPublic ? 'text-shibutis-orange' : 'text-gray-400'
+              }`}>
                 Public Sale
               </h3>
               {isPublic && (
@@ -500,7 +563,7 @@ const NFTMintPage = () => {
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Price:</span>
                 <span className="text-shibutis-text font-mono">
-                  {loading.contract ? '...' : `${mintPriceEth} ETH`}
+                  {isLoadingData ? '...' : `${mintPriceEth} ETH`}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -510,31 +573,41 @@ const NFTMintPage = () => {
               <div className="flex justify-between">
                 <span className="text-shibutis-subtitle">Max per Wallet:</span>
                 <span className="text-shibutis-text">
-                  {loading.contract ? '...' : maxPerWalletPublic === 0 ? 'Unlimited' : `${maxPerWalletPublic} NFTs`}
+                  {isLoadingData ? '...' : maxPerWalletPublic === 0 ? 'Unlimited' : `${maxPerWalletPublic} NFTs`}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Progress Bar - Now shows data without wallet connection */}
         <div className="mt-12 max-w-2xl mx-auto">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-shibutis-subtitle">Mint Progress</span>
-            <span className="text-sm text-shibutis-text">
-              {loading.contract ? '...' : `${totalMinted} / ${maxSupply}`}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-shibutis-text">
+                {isLoadingData ? '...' : `${totalMinted.toLocaleString()} / ${maxSupply.toLocaleString()}`}
+              </span>
+              {!isConnected && (
+                <RefreshCw
+                  size={12}
+                  className={`text-shibutis-subtitle hover:text-shibutis-text cursor-pointer ${readOnlyLoading ? 'animate-spin' : ''}`}
+                  onClick={refreshReadOnlyData}
+                />
+              )}
+            </div>
           </div>
           <div className="w-full bg-shibutis-dark rounded-full h-3 border border-shibutis-border/30 overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-shibutis-primary to-shibutis-orange rounded-full transition-all duration-500 relative"
-              style={{ width: loading.contract ? '0%' : `${(totalMinted / maxSupply) * 100}%` }}
+              style={{ width: isLoadingData ? '0%' : `${(totalMinted / maxSupply) * 100}%` }}
             >
               <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
             </div>
           </div>
           <div className="text-center mt-2 text-xs text-shibutis-subtitle">
-            {loading.contract ? '...' : `${((totalMinted / maxSupply) * 100).toFixed(1)}% minted`}
+            {isLoadingData ? '...' : `${((totalMinted / maxSupply) * 100).toFixed(1)}% minted`}
+            {!isConnected && <span className="ml-2">• Live from blockchain</span>}
           </div>
         </div>
       </div>
